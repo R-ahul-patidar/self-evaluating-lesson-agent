@@ -281,7 +281,8 @@ self-evaluating-lesson-agent/
 ├── .agents/                    # Agent skills, rules, and architecture specs
 ├── docs/
 │   ├── architecture.md         # In-depth architectural breakdown & data flow
-│   └── design_decisions.md     # Rationale for framework, model, & storage choices
+│   ├── design_decisions.md     # Rationale for framework, model, & storage choices
+│   └── images/                 # Application screenshots & UI visual assets
 ├── output/
 │   ├── faiss_index/            # Cached FAISS vector database
 │   └── memory.db               # Persisted SQLite memory & run history
@@ -333,3 +334,37 @@ self-evaluating-lesson-agent/
 - **Why FAISS with local caching?** Zero external cloud database dependencies; fast local similarity search with disk cache validated by document timestamps (`ref_mtime`).
 - **Why SQLite for memory?** Built into Python stdlib, zero setup overhead, easily inspectable, and persistent across application restarts.
 - **Why Vanilla JS with 2s polling?** Lightweight, resilient, and eliminates complex WebSocket connection state management while delivering real-time UX.
+
+---
+
+## 📸 Application Screenshots
+
+### 1. Lesson Configuration & Input Dashboard
+Configure target topic, learner profile (grade level, English proficiency, prior knowledge), learning goals, and toggle demo mode for intentional error injection.
+
+![Lesson Configuration](docs/images/1_lesson_configuration.png)
+
+### 2. Live Agent Workflow Progress
+Watch the LangGraph state machine execute each step with real-time status polling (Reference Retrieval, Content Generation, Quality Evaluation, and Gate Decision).
+
+![Live Agent Workflow Progress](docs/images/2_live_workflow_execution.png)
+
+### 3. Strict 10-Check Quality Gate Evaluation
+Independent evaluator runs against deterministic rubric criteria (Accuracy, Grounding, Beginner-Friendly, Jargon Explained, RAG Workflow, Examples, etc.) with detailed PASS/FAIL rationales.
+
+![Evaluation Results](docs/images/3_evaluation_results.png)
+
+### 4. Final Generated Lesson & Export
+Clean, beautifully formatted educational content with inline badge definitions, summary tables, and one-click copy or markdown download.
+
+![Final Lesson Output](docs/images/4_final_lesson_output.png)
+
+### 5. Compiled LangGraph Architecture Visualizer
+Visual representation of the compiled state graph showing the self-correction loop, bounded retry limits, and persistent SQLite memory feedback.
+
+![System Architecture Visualizer](docs/images/5_system_architecture_graph.png)
+
+### 6. State Machine Orchestration Breakdown
+Interactive breakdown of all workflow nodes and conditional branching edges powering the autonomous generation and evaluation pipeline.
+
+![State Machine Nodes & Orchestration](docs/images/6_state_machine_nodes.png)
