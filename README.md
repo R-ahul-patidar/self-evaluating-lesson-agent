@@ -269,37 +269,8 @@ pytest tests/test_termination.py -v   # Max retries & guaranteed loop terminatio
 pytest tests/test_api.py -v           # FastAPI endpoints, validation & status polling
 ```
 
----
 
-## 🎬 Demo Mode & Loom Walkthrough Guide
 
-The UI features a built-in **Demo Mode** switch specifically designed for the assessment video demonstration.
-
-### Recommended 15–20 Minute Video Structure
-
-```
-┌────────────────────────────────────────────────────────────────────────┐
-│ 1. Introduction & Architecture Overview (3–4 mins)                    │
-│    • Show docs/architecture.md and explain LangGraph state flow.       │
-│    • Explain Generator vs. Evaluator independence (temp=0.0).          │
-│                                                                        │
-│ 2. Standard Passing Run (4–5 mins)                                     │
-│    • Generate "Introduction to RAG" with standard settings.            │
-│    • Observe live step-by-step progress cards updating via polling.   │
-│    • Review the 10/10 PASS evaluation table and final lesson.          │
-│                                                                        │
-│ 3. Deliberate Error Catching & Auto-Healing (5–6 mins)                 │
-│    • Turn ON the "Demo Mode" toggle in the UI.                         │
-│    • System injects deliberate fallacy: "RAG retrains model on upload".│
-│    • Watch Evaluator catch it: accuracy → FAIL on Attempt 1.           │
-│    • Inspect the Rejection Log (failure reasons + planned corrections).│
-│    • Watch Attempt 2 regenerate, correct the error, and PASS.          │
-│                                                                        │
-│ 4. Self-Evolving Memory & Code Walkthrough (3–4 mins)                  │
-│    • Inspect output/memory.db to show how failure patterns persist.    │
-│    • Show Code Traceability Matrix and explain trade-off decisions.    │
-└────────────────────────────────────────────────────────────────────────┘
-```
 
 ---
 
