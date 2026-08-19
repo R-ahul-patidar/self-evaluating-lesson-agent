@@ -1,0 +1,190 @@
+{% extends "base.html" %}
+
+{% block title %}Generate Lesson — LessonAgent{% endblock %}
+{% block nav_home %}active{% endblock %}
+
+{% block content %}
+<div class="page-hero">
+    <h1>Self-Evaluating Lesson Generator</h1>
+    <p class="hero-subtitle">Enter a topic and watch the AI generate, evaluate, and refine its own lesson until it passes a strict quality gate.</p>
+</div>
+
+<div class="app-layout" id="app-layout">
+
+    <!-- ── Configuration Form ───────────────────────────────────────────── -->
+    <section class="card form-card" id="config-section">
+        <div class="card-header">
+            <h2>📋 Configure Your Lesson</h2>
+        </div>
+        <form id="generate-form" class="generate-form">
+            <div class="form-group full-width">
+                <label for="topic">Topic <span class="required">*</span></label>
+                <input type="text" id="topic" name="topic"
+                       placeholder="e.g. Introduction to RAG"
+                       value="Introduction to RAG" required
+                       class="form-input" maxlength="200">
+                <span class="form-hint">The topic you want a beginner lesson for</span>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="content_type">Content Type</label>
+                    <select id="content_type" name="content_type" class="form-select">
+                        <option value="lesson" selected>Lesson</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="education_level">Education Level</label>
+                    <select id="education_level" name="education_level" class="form-select">
+                        <option value="12th_grade" selected>12th Grade</option>
+                        <option value="undergraduate">Undergraduate</option>
+                        <option value="graduate">Graduate</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="english_level">English Level</label>
+                    <select id="english_level" name="english_level" class="form-select">
+                        <option value="limited" selected>Limited</option>
+                        <option value="intermediate">Intermediate</option>
+                        <option value="fluent">Fluent</option>
+                        <option value="native">Native</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="prior_knowledge">Prior Knowledge</label>
+                    <select id="prior_knowledge" name="prior_knowledge" class="form-select">
+                        <option value="none" selected>None / Beginner</option>
+                        <option value="beginner">Some Basics</option>
+                        <option value="intermediate">Intermediate</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-group full-width">
+                <label for="learning_goal">Learning Goal</label>
+                <input type="text" id="learning_goal" name="learning_goal"
+                       placeholder="e.g. Understand the basics from zero"
+                       value="Understand the topic from zero and kickstart an AI career"
+                       class="form-input">
+            </div>
+
+            <div class="form-group full-width">
+                <label class="toggle-label">
+                    <input type="checkbox" id="demo_mode" name="demo_mode" class="toggle-input">
+                    <span class="toggle-slider"></span>
+                    <span class="toggle-text">
+                        🎬 <strong>Demo Mode</strong> — Inject deliberate error to showcase the evaluator catching it
+                    </span>
+                </label>
+                <span class="form-hint demo-hint">Injects: "RAG retrains the model when a document is uploaded" → triggers Accuracy FAIL → auto-fix</span>
+            </div>
+
+            <div class="form-actions">
+                <button type="submit" id="submit-btn" class="btn-primary">
+                    <span class="btn-icon">⚡</span>
+                    <span class="btn-text">Generate Lesson</span>
+                </button>
+            </div>
+        </form>
+    </section>
+
+    <!-- ── Workflow Progress Panel ──────────────────────────────────────── -->
+    <section class="card workflow-card hidden" id="workflow-section">
+        <div class="card-header">
+            <h2>🔄 Agent Workflow</h2>
+            <div class="attempt-badge" id="attempt-badge">Attempt 1 / 3</div>
+        </div>
+        <div class="workflow-steps" id="workflow-steps">
+            <div class="workflow-step pending" id="step-request_received" data-step="request_received">
+                <div class="step-icon">○</div>
+                <div class="step-content">
+                    <span class="step-name">Request Received</span>
+                </div>
+            </div>
+            <div class="workflow-step pending" id="step-context" data-step="reference_context_retrieved">
+                <div class="step-icon">○</div>
+                <div class="step-content">
+                    <span class="step-name">Retrieving Reference Context</span>
+                    <span class="step-detail">FAISS · gemini-embedding-001</span>
+                </div>
+            </div>
+            <div class="workflow-step pending" id="step-generate" data-step="content_generated">
+                <div class="step-icon">○</div>
+                <div class="step-content">
+                    <span class="step-name">Generating Content</span>
+                    <span class="step-detail">gemini-3.5-flash-lite</span>
+                </div>
+            </div>
+            <div class="workflow-step pending" id="step-evaluate" data-step="evaluate">
+                <div class="step-icon">○</div>
+                <div class="step-content">
+                    <span class="step-name">Evaluating Quality</span>
+                    <span class="step-detail">10-check PASS/FAIL rubric</span>
+                </div>
+            </div>
+            <div class="workflow-step pending hidden" id="step-regenerate" data-step="regenerate">
+                <div class="step-icon">○</div>
+                <div class="step-content">
+                    <span class="step-name">Regenerating with Feedback</span>
+                    <span class="step-detail">Targeted corrections applied</span>
+                </div>
+            </div>
+            <div class="workflow-step pending" id="step-finalize" data-step="finalize">
+                <div class="step-icon">○</div>
+                <div class="step-content">
+                    <span class="step-name">Quality Gate</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ── Evaluation Panel ─────────────────────────────────────────────── -->
+    <section class="card eval-card hidden" id="evaluation-section">
+        <div class="card-header">
+            <h2>📊 Evaluation Results</h2>
+            <div id="eval-overall-badge" class="status-badge"></div>
+        </div>
+        <div id="eval-checks-table" class="eval-table"></div>
+    </section>
+
+    <!-- ── Rejection Log Panel ──────────────────────────────────────────── -->
+    <section class="card log-card hidden" id="rejection-log-section">
+        <div class="card-header">
+            <h2>📋 Rejection Log</h2>
+        </div>
+        <div id="rejection-log-content" class="rejection-log"></div>
+    </section>
+
+    <!-- ── Final Lesson Panel ───────────────────────────────────────────── -->
+    <section class="card lesson-card hidden" id="lesson-section">
+        <div class="card-header">
+            <h2>📖 Final Lesson</h2>
+            <div class="lesson-meta" id="lesson-meta"></div>
+        </div>
+        <div class="lesson-actions">
+            <button id="copy-btn" class="btn-secondary" onclick="copyLesson()">
+                <span>📋</span> Copy
+            </button>
+            <button id="download-btn" class="btn-secondary" onclick="downloadLesson()">
+                <span>⬇</span> Download .md
+            </button>
+        </div>
+        <div id="lesson-content" class="lesson-content"></div>
+    </section>
+
+</div>
+
+<!-- Error toast -->
+<div class="toast hidden" id="error-toast">
+    <span class="toast-icon">⚠️</span>
+    <span id="toast-message"></span>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/marked@11.1.1/marked.min.js"></script>
+<script src="/static/js/app.js"></script>
+{% endblock %}

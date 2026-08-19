@@ -1,0 +1,387 @@
+{% extends "base.html" %}
+
+{% block title %}How It Works — System Architecture & Engineering{% endblock %}
+{% block nav_about %}active{% endblock %}
+
+{% block content %}
+<div class="page-hero">
+    <h1>System Architecture & How It Works</h1>
+    <p class="hero-subtitle">An in-depth technical walkthrough of our self-evaluating agentic loop, LangGraph state machine, RAG grounding pipeline, and self-evolving memory system.</p>
+</div>
+
+<div class="about-layout">
+
+    <!-- ── 1. High-Level Concept ────────────────────────────────────────── -->
+    <!-- ── 1. LangGraph Visual Workflow ──────────────────────────────── -->
+    <section class="card about-card">
+        <div class="card-header">
+            <h2>🕸️ LangGraph Compiled Workflow Visualizer</h2>
+            <span class="status-badge pass">Compiled Graph</span>
+        </div>
+        <p class="about-lead">
+            This is the exact state graph compiled by <strong>LangGraph</strong> (<code>src/graph/workflow.py</code>). 
+            Notice the conditional branching at <code>evaluate_content</code> where failed checks trigger an autonomous retry loop (bounded at <code>max_retries=2</code>) before routing to <code>__end__</code>.
+        </p>
+
+        <!-- Mermaid Diagram Container -->
+        <div class="mermaid-diagram-box">
+            <div class="mermaid">
+graph TD
+    classDef startEnd fill:#8b5cf6,stroke:#7c3aed,stroke-width:2px,color:#ffffff,font-weight:bold;
+    classDef nodeBox fill:#161b22,stroke:#30363d,stroke-width:1.5px,color:#e6edf3;
+    classDef genBox fill:#1e1b4b,stroke:#818cf8,stroke-width:2px,color:#e0e7ff;
+    classDef evalBox fill:#2e1065,stroke:#c084fc,stroke-width:2px,color:#f3e8ff,font-weight:bold;
+    classDef passBox fill:#064e3b,stroke:#10b981,stroke-width:2px,color:#ecfdf5;
+    classDef failBox fill:#7f1d1d,stroke:#ef4444,stroke-width:2px,color:#fef2f2;
+
+    Start(["__start__"]):::startEnd --> N1["1. prepare_request<br/><i>(Init state & load SQLite memory)</i>"]:::nodeBox
+    N1 --> N2["2. retrieve_reference_context<br/><i>(FAISS semantic search)</i>"]:::nodeBox
+    N2 --> N3["3. generate_content<br/><b>Generator Agent</b><br/><i>(Gemini 3.5 Flash Lite)</i>"]:::genBox
+    N3 --> N4{"4. evaluate_content<br/><b>Evaluator Quality Gate</b><br/><i>(10 PASS/FAIL Checks · temp=0.0)</i>"}:::evalBox
+
+    N4 -.->|"✓ ALL 10 PASS"| N5["5. finalize<br/><i>(Ship Final Lesson & Audit Log)</i>"]:::passBox
+    N4 -.->|"✗ ANY FAIL [retries &lt; 2]"| N6["Failure & Feedback Processing<br/><i>(Extract failure diff & log to SQLite memory)</i>"]:::failBox
+    N4 -.->|"✗ FAIL [retries &gt;= 2]"| N5
+
+    N6 -->|"↺ Loop back with feedback to rewrite draft"| N3
+    N5 --> End(["__end__"]):::startEnd
+            </div>
+        </div>
+
+        <!-- Supervisor vs Actor-Critic Comparison -->
+        <div class="comparison-card">
+            <div class="comp-header">
+                <span class="comp-icon">💡</span>
+                <h3>Architectural Pattern: Actor-Critic (Quality Gate) vs. Supervisor</h3>
+            </div>
+            <div class="comp-grid">
+                <div class="comp-col">
+                    <div class="comp-pill">Supervisor Pattern (Task Routing)</div>
+                    <p>A central "Supervisor" agent delegates different sub-tasks to specialized domain workers (e.g. <code>web_researcher</code>, <code>nl2sql</code>, <code>rag</code>) and combines their results. Used when solving multi-step tool-use problems.</p>
+                </div>
+                <div class="comp-col highlight">
+                    <div class="comp-pill active">Actor-Critic / Quality Gate (Our Architecture)</div>
+                    <p>A dual-agent self-correcting loop where one agent drafts content (<strong>Generator</strong>) and an independent, unbiased agent audits it against hard pass/fail criteria (<strong>Evaluator</strong>). On failure, targeted feedback forces self-correction. Exactly matches the assessment goal: <em>an agent that judges its own quality before shipping</em>.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ── 2. LangGraph Workflow ────────────────────────────────────────── -->
+    <section class="card about-card">
+        <div class="card-header">
+            <h2>🔄 LangGraph 1.x State Machine Workflow</h2>
+            <span class="status-badge pass">Orchestration</span>
+        </div>
+        <p class="section-desc">
+            The orchestration is managed by <strong>LangGraph</strong> using a typed state graph (<code>AgentState</code>). 
+            Conditional edges make retry bounds and branching declarative rather than an error-prone imperative loop.
+        </p>
+
+        <div class="nodes-grid">
+            <div class="node-card">
+                <div class="node-num">1</div>
+                <div class="node-info">
+                    <h3><code>node_prepare_request</code></h3>
+                    <p>Initializes run state, sets retry counters (<code>max_retries=2</code>), and queries SQLite to load past historical failure patterns for the topic.</p>
+                    <div class="node-tags">
+                        <span class="tag">SQLite Memory</span>
+                        <span class="tag">State Initialization</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="node-card">
+                <div class="node-num">2</div>
+                <div class="node-info">
+                    <h3><code>node_retrieve_reference_context</code></h3>
+                    <p>Queries the local FAISS vector store to retrieve top-4 relevant chunks from verified reference documentation (<code>rag_fundamentals.md</code>).</p>
+                    <div class="node-tags">
+                        <span class="tag">FAISS</span>
+                        <span class="tag">gemini-embedding-001</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="node-card">
+                <div class="node-num">3</div>
+                <div class="node-info">
+                    <h3><code>node_generate_content</code></h3>
+                    <p>Generator Agent drafts the lesson using Gemini 3.5 Flash Lite. Inputs include learner profile, learning goal, retrieved reference context, rubric checkpoints, and historical pitfalls.</p>
+                    <div class="node-tags">
+                        <span class="tag">gemini-3.5-flash-lite</span>
+                        <span class="tag">Prompt Engineering</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="node-card">
+                <div class="node-num">4</div>
+                <div class="node-info">
+                    <h3><code>node_evaluate_content</code></h3>
+                    <p>Independent Evaluator Agent judges the lesson against the 10 rubric checks using <code>temperature=0.0</code> and returns structured Pydantic JSON (<code>EvaluationResult</code>).</p>
+                    <div class="node-tags">
+                        <span class="tag">Deterministic temp=0.0</span>
+                        <span class="tag">Pydantic v2</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="node-card">
+                <div class="node-num">5</div>
+                <div class="node-info">
+                    <h3><code>_decide_after_evaluation</code> (Edge)</h3>
+                    <p>Conditional edge: If <code>passed=True</code>, routes to <strong>finalize</strong>. If <code>passed=False</code> and <code>retry_count &lt; max_retries</code>, routes to <strong>regenerate</strong>. Otherwise, terminates.</p>
+                    <div class="node-tags">
+                        <span class="tag">Conditional Edge</span>
+                        <span class="tag">Bounded Loop</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="node-card">
+                <div class="node-num">6</div>
+                <div class="node-info">
+                    <h3><code>node_regenerate_content</code></h3>
+                    <p>Constructs a targeted prompt containing exact failure reasons, specific required fixes, and previous draft. Logs the rejection to SQLite and triggers rewrite.</p>
+                    <div class="node-tags">
+                        <span class="tag">Targeted Feedback</span>
+                        <span class="tag">Rejection Logging</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="node-card full-span">
+                <div class="node-num">7</div>
+                <div class="node-info">
+                    <h3><code>node_finalize</code></h3>
+                    <p>Compiles final lesson content, builds complete rejection audit log, records execution outcome into SQLite <code>run_history</code>, and transitions state to <code>complete</code>.</p>
+                    <div class="node-tags">
+                        <span class="tag">Run History</span>
+                        <span class="tag">Audit Trail</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ── 3. Tech Stack Breakdown ──────────────────────────────────────── -->
+    <section class="card about-card">
+        <div class="card-header">
+            <h2>🛠️ Technology Stack & Architectural Rationale</h2>
+        </div>
+        
+        <div class="tech-grid">
+            <div class="tech-card">
+                <div class="tech-header">
+                    <span class="tech-icon">🕸️</span>
+                    <h3>LangGraph 1.x</h3>
+                </div>
+                <p><strong>Role:</strong> Cyclic Workflow Orchestration</p>
+                <p class="tech-rationale">Provides explicit typed state transitions (<code>AgentState</code> TypedDict), declarative conditional retry edges, and guarantees strict termination without hidden global state or infinite loops.</p>
+            </div>
+
+            <div class="tech-card">
+                <div class="tech-header">
+                    <span class="tech-icon">🤖</span>
+                    <h3>Google Gemini 3.5 Flash Lite</h3>
+                </div>
+                <p><strong>Role:</strong> Core Large Language Model (<code>gemini-3.5-flash-lite</code>)</p>
+                <p class="tech-rationale">Selected for high reasoning performance, rapid inference speed, and cost efficiency across multi-call agentic loops. Generator runs with <code>temperature=0.2</code>; Evaluator runs with <code>temperature=0.0</code>.</p>
+            </div>
+
+            <div class="tech-card">
+                <div class="tech-header">
+                    <span class="tech-icon">📦</span>
+                    <h3>FAISS + Google Embeddings</h3>
+                </div>
+                <p><strong>Role:</strong> Grounded Knowledge Vector Store (<code>models/gemini-embedding-001</code>)</p>
+                <p class="tech-rationale">Zero cloud database dependencies. Chunks verified domain references (600 chars, 100 overlap) and caches FAISS index locally to disk with staleness detection based on file modification timestamps (<code>ref_mtime</code>).</p>
+            </div>
+
+            <div class="tech-card">
+                <div class="tech-header">
+                    <span class="tech-icon">⚖️</span>
+                    <h3>Independent Evaluator Agent</h3>
+                </div>
+                <p><strong>Role:</strong> Strict Quality Gate</p>
+                <p class="tech-rationale">Operates in complete isolation from the Generator's internal system prompts. Eliminates confirmation bias and returns structured, schema-validated JSON outputs via Pydantic.</p>
+            </div>
+
+            <div class="tech-card">
+                <div class="tech-header">
+                    <span class="tech-icon">💾</span>
+                    <h3>SQLite Self-Evolving Memory</h3>
+                </div>
+                <p><strong>Role:</strong> Cross-Run Failure Learning</p>
+                <p class="tech-rationale">Stores historical failure patterns in <code>output/memory.db</code>. Increments frequency counts on recurring mistakes and injects past pitfalls into future generator prompts to prevent repeat errors.</p>
+            </div>
+
+            <div class="tech-card">
+                <div class="tech-header">
+                    <span class="tech-icon">⚡</span>
+                    <h3>FastAPI + Non-Blocking Polling</h3>
+                </div>
+                <p><strong>Role:</strong> Backend API & Client UX</p>
+                <p class="tech-rationale">Incoming generation requests spawn background worker threads and return an immediate <code>run_id</code>. Vanilla JS polls <code>GET /runs/{run_id}</code> every 2 seconds, providing smooth live progress updates.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- ── 4. The 10-Point Evaluation Rubric ─────────────────────────────── -->
+    <section class="card about-card">
+        <div class="card-header">
+            <h2>📊 The 10 Hard PASS/FAIL Evaluation Checkpoints</h2>
+            <span class="status-badge fail">Strict: No Partial Credit</span>
+        </div>
+        <p class="section-desc">
+            To eliminate subjectivity, the Evaluator judges every lesson against 10 strict boolean checks. If any single check fails, the entire lesson is marked <strong>FAIL</strong> and rejected for regeneration.
+        </p>
+
+        <div class="rubric-table-wrapper">
+            <table class="tech-table">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Criterion Name</th>
+                        <th>Target Dimension</th>
+                        <th>Verification Rule</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>1</td>
+                        <td><code>accuracy</code></td>
+                        <td>Technical Correctness</td>
+                        <td>Ensures no materially incorrect technical claims (e.g., catches false retraining claims).</td>
+                    </tr>
+                    <tr>
+                        <td>2</td>
+                        <td><code>grounding</code></td>
+                        <td>Factual Consistency</td>
+                        <td>All factual claims must be consistent with retrieved reference documentation.</td>
+                    </tr>
+                    <tr>
+                        <td>3</td>
+                        <td><code>beginner_friendly</code></td>
+                        <td>Target Learner Fit</td>
+                        <td>Language suitable for 12th-grade Indian graduate with limited English vocabulary.</td>
+                    </tr>
+                    <tr>
+                        <td>4</td>
+                        <td><code>jargon_explained</code></td>
+                        <td>Clarity</td>
+                        <td>All technical terms (embeddings, vector database, retrieval) defined with simple analogies.</td>
+                    </tr>
+                    <tr>
+                        <td>5</td>
+                        <td><code>why_rag</code></td>
+                        <td>Core Motivation</td>
+                        <td>Clearly explains the problems RAG solves (outdated knowledge & LLM hallucinations).</td>
+                    </tr>
+                    <tr>
+                        <td>6</td>
+                        <td><code>rag_workflow</code></td>
+                        <td>Process Mechanics</td>
+                        <td>Correctly outlines the complete 4-step pipeline: Query → Retrieve → Augment → Generate.</td>
+                    </tr>
+                    <tr>
+                        <td>7</td>
+                        <td><code>example</code></td>
+                        <td>Teaches by Example</td>
+                        <td>Must include at least one concrete, relatable real-world scenario (e.g., support bot).</td>
+                    </tr>
+                    <tr>
+                        <td>8</td>
+                        <td><code>key_concept_coverage</code></td>
+                        <td>Curriculum Completeness</td>
+                        <td>Must explicitly cover: Knowledge Base, Embeddings, Vector DB, Retrieval, Context, Generation.</td>
+                    </tr>
+                    <tr>
+                        <td>9</td>
+                        <td><code>coherent_teaching_flow</code></td>
+                        <td>Pedagogical Structure</td>
+                        <td>Logical progression from simple foundational intuition to technical mechanics without jumping.</td>
+                    </tr>
+                    <tr>
+                        <td>10</td>
+                        <td><code>standalone</code></td>
+                        <td>Self-Sufficiency</td>
+                        <td>Learner grasps the core concept completely without needing external search or help.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <!-- ── 5. Self-Evolving Memory System ───────────────────────────────── -->
+    <section class="card about-card">
+        <div class="card-header">
+            <h2>🧠 Self-Evolving Feedback Loop (How Memory Works)</h2>
+        </div>
+        <p class="section-desc">
+            The platform satisfies the <strong>Self-Evolving</strong> requirement across runs by recording failure patterns in SQLite:
+        </p>
+
+        <div class="memory-flow-grid">
+            <div class="memory-step">
+                <h4>1. Failure Capture</h4>
+                <p>On any evaluation failure, <code>save_evaluation_failures()</code> writes the check name, failure reason, and actionable correction to the <code>memory_feedback</code> table.</p>
+            </div>
+            <div class="memory-step">
+                <h4>2. Recurrence Weighting</h4>
+                <p>If the same check fails repeatedly on future runs, SQLite increments the <code>frequency</code> counter and updates <code>last_seen</code>.</p>
+            </div>
+            <div class="memory-step">
+                <h4>3. Prompt Sharpening</h4>
+                <p>At the start of subsequent runs, <code>load_memory_feedback()</code> fetches high-frequency pitfalls and injects them directly into the Generator prompt.</p>
+            </div>
+        </div>
+
+        <div class="code-box">
+            <span class="code-label">Injected Prompt Context (Example from Memory)</span>
+            <pre><code>## ⚠️ Historical Failures (Avoid these mistakes from past attempts)
+- [jargon_explained] (seen 3 times): "Embedding was used without explanation."
+  → Fix: Define embedding with a simple analogy before using the term.</code></pre>
+        </div>
+    </section>
+
+    <!-- ── 6. Demo Mode (Deliberate Error & Self-Healing) ────────────────── -->
+    <section class="card about-card">
+        <div class="card-header">
+            <h2>🎬 Built-In Demo Mode (Deliberate Error Walkthrough)</h2>
+        </div>
+        <p class="about-lead">
+            To enable reliable demonstration during Loom recording without manual code hacks, the UI includes a <strong>Demo Mode</strong> toggle:
+        </p>
+        <ul class="demo-list">
+            <li><strong>Step 1:</strong> Demo Mode injects a deliberate fallacy into the Attempt 1 prompt: <em>"RAG retrains the language model whenever a new document is uploaded."</em></li>
+            <li><strong>Step 2:</strong> The Evaluator Agent inspects the lesson and immediately fails the <code>accuracy</code> checkpoint.</li>
+            <li><strong>Step 3:</strong> Attempt 1 is recorded in the <strong>Rejection Log</strong> with the exact reason and correction instructions.</li>
+            <li><strong>Step 4:</strong> LangGraph invokes <code>node_regenerate_content</code>, which passes the failure details into the rewrite prompt.</li>
+            <li><strong>Step 5:</strong> Attempt 2 is generated with the error corrected, passes all 10 checks (10/10 PASS), and is shipped with the full rejection audit trail.</li>
+        </ul>
+    </section>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({
+        startOnLoad: true,
+        theme: 'dark',
+        themeVariables: {
+            darkMode: true,
+            background: '#161b22',
+            primaryColor: '#8b5cf6',
+            primaryTextColor: '#e6edf3',
+            primaryBorderColor: '#a78bfa',
+            lineColor: '#a78bfa',
+            secondaryColor: '#1e293b',
+            tertiaryColor: '#0d1117'
+        }
+    });
+</script>
+{% endblock %}
